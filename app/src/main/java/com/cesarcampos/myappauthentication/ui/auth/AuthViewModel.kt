@@ -8,8 +8,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cesarcampos.myappauthentication.data.local.AppDatabase
 import com.cesarcampos.myappauthentication.data.local.UserEntity
+import com.cesarcampos.myappauthentication.data.remote.AuthRequest
+import com.cesarcampos.myappauthentication.data.remote.AuthService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -21,6 +25,13 @@ import kotlin.time.Duration.Companion.milliseconds
 class AuthViewModel(application: Application)  : AndroidViewModel(application) {
 
     private val userDao = AppDatabase.getDatabase(application).userDao()
+
+    private val retrofit = Retrofit.Builder()
+        .baseUrl("https://vkrgpkprc7.execute-api.us-east-1.amazonaws.com/Initial/")
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+
+    private val authService = retrofit.create(AuthService::class.java)
 
     // Estado para controlar si la app está cargando algo
     private val _isLoading = mutableStateOf(false)
@@ -34,18 +45,19 @@ class AuthViewModel(application: Application)  : AndroidViewModel(application) {
      * Login Real con Sqlite.
      */
     fun login(email: String, password: String, onSuccess: () -> Unit) {
-        if (!validateEmail(email) || !validatePassword(password)) return
         viewModelScope.launch {
             _isLoading.value = true
-            _errorMessage.value = null
-
-            val user = userDao.login(email, password)
-
-            if (user != null) {
-                onSuccess()
-            } else {
+            try {
+                val response = authService.authenticate(AuthRequest("login", email, password))
+                if (response.isSuccessful) {
+                    onSuccess()
+                } else {
+                    _errorMessage.value = "Error: ${response.body()?.message}"
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "No hay conexión al servidor"
+            } finally {
                 _isLoading.value = false
-                _errorMessage.value = "Credentials don't match"
             }
         }
     }
